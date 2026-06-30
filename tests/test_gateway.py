@@ -49,3 +49,23 @@ def test_parse_rejects_unsupported_type():
         files={"file": ("notes.txt", b"hello", "text/plain")},
     )
     assert resp.status_code == 415
+
+
+def test_index_and_query_flow():
+    idx = client.post(
+        "/api/statements/index",
+        files={"file": ("march.csv", _CSV, "text/csv")},
+    )
+    assert idx.status_code == 200
+    assert idx.json()["indexed"] == 2
+
+    resp = client.post("/api/query", json={"question": "salary", "top_k": 1})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "answer" in body
+    assert len(body["matches"]) == 1
+    assert "Salary" in body["matches"][0]["description"]
+
+
+def test_query_requires_question():
+    assert client.post("/api/query", json={"question": "   "}).status_code == 400

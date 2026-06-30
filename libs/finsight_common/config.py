@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # Pinecone
     pinecone_api_key: str | None = None
     pinecone_index: str = "finsight"
+    pinecone_cloud: str = "aws"
+    pinecone_region: str = "us-east-1"
+
+    # Embeddings
+    embedding_dim: int = 1536
 
     # Kafka / Redpanda
     kafka_bootstrap_servers: str = "localhost:9092"
@@ -54,6 +59,15 @@ class Settings(BaseSettings):
             self.azure_openai_endpoint
             and self.azure_openai_api_key
             and self.azure_openai_chat_deployment
+        )
+
+    @property
+    def azure_embeddings_configured(self) -> bool:
+        """True when an Azure OpenAI embeddings deployment is available."""
+        return bool(
+            self.azure_openai_endpoint
+            and self.azure_openai_api_key
+            and self.azure_openai_embeddings_deployment
         )
 
 
