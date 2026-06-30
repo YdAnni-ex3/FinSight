@@ -1,0 +1,54 @@
+name: finsight
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: finsight-postgres
+    environment:
+      POSTGRES_USER: finsight
+      POSTGRES_PASSWORD: finsight
+      POSTGRES_DB: finsight
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finsight"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Azure Blob Storage emulator — mirrors the real "raw-statements" container locally.
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:latest
+    container_name: finsight-azurite
+    command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data"
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite:/data
+
+  # Kafka-API-compatible broker (lighter than full Kafka) for the streaming phase.
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: finsight-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --overprovisioned
+      - --node-id=0
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092
+      - --advertise-kafka-addr=PLAINTEXT://localhost:9092
+    ports:
+      - "9092:9092"
+      - "9644:9644"
+    volumes:
+      - redpanda:/var/lib/redpanda/data
+
+volumes:
+  pgdata:
+  azurite:
+  redpanda:
