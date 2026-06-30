@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # Azure OpenAI / Microsoft Foundry
     azure_openai_endpoint: str | None = None
     azure_openai_api_key: str | None = None
-    azure_openai_api_version: str = "2024-06-01"
+    azure_openai_api_version: str = "2024-10-21"
     azure_openai_chat_deployment: str | None = None
     azure_openai_embeddings_deployment: str | None = None
 

@@ -25,11 +25,17 @@ class AzureOpenAIProvider:
         )
 
     def chat(self, messages: list[ChatMessage], *, temperature: float = 0.0) -> str:
-        response = self._client.chat.completions.create(
-            model=self._settings.azure_openai_chat_deployment,
-            messages=[m.model_dump() for m in messages],
-            temperature=temperature,
-        )
+        payload = {
+            "model": self._settings.azure_openai_chat_deployment,
+            "messages": [m.model_dump() for m in messages],
+        }
+        try:
+            response = self._client.chat.completions.create(**payload, temperature=temperature)
+        except Exception as exc:
+            # Some models (gpt-5 / o-series) only accept the default temperature.
+            if "temperature" not in str(exc).lower():
+                raise
+            response = self._client.chat.completions.create(**payload)
         return response.choices[0].message.content or ""
 
     def embed(self, texts: list[str]) -> list[list[float]]:

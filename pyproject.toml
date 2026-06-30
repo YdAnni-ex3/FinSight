@@ -38,7 +38,7 @@ ai = [
     "azure-identity>=1.16",
     "azure-keyvault-secrets>=4.8",
     "azure-storage-blob>=12.20",
-    "pinecone-client>=4.0",
+    "pinecone>=5.0",
 ]
 dev = [
     "pytest>=8.1",

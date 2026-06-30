@@ -27,8 +27,8 @@ param(
     [string]$Location = "centralindia",
     [string]$OpenAiLocation = "eastus2",
     [string]$ResourceGroup = "finsight-rg",
-    [string]$ChatModel = "gpt-4o-mini",
-    [string]$ChatModelVersion = "2024-07-18",
+    [string]$ChatModel = "gpt-5-mini",
+    [string]$ChatModelVersion = "2025-08-07",
     [string]$EmbeddingsModel = "text-embedding-3-small",
     [string]$EmbeddingsModelVersion = "1",
     [switch]$PushToKeyVault
@@ -113,5 +113,5 @@ Write-Host "FINSIGHT_AZURE_OPENAI_CHAT_DEPLOYMENT=chat"
 Write-Host "FINSIGHT_AZURE_OPENAI_EMBEDDINGS_DEPLOYMENT=embeddings"
 Write-Host "`nRetrieve the key when needed with:" -ForegroundColor Yellow
 Write-Host "  az cognitiveservices account keys list -n $OpenAiName -g $ResourceGroup --query key1 -o tsv"
-Write-Host "`nResource group '$ResourceGroup' — delete everything later with:" -ForegroundColor Yellow
+Write-Host "`nResource group '$ResourceGroup' - delete everything later with:" -ForegroundColor Yellow
 Write-Host "  az group delete --name $ResourceGroup --yes"
