@@ -1,0 +1,19 @@
+# Trim the build context sent to ACR.
+.venv/
+**/__pycache__/
+*.pyc
+.git/
+.github/
+data/
+frontend/
+node_modules/
+infra/
+monitoring/
+tests/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.env
+.env.*
+!.env.example
+*.log

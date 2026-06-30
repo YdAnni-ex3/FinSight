@@ -68,7 +68,12 @@ class PineconeVectorStore:
         from pinecone import Pinecone, ServerlessSpec
 
         client = Pinecone(api_key=settings.pinecone_api_key)
-        existing = {idx["name"] for idx in client.list_indexes()}
+        index_list = client.list_indexes()
+        existing = (
+            set(index_list.names())
+            if hasattr(index_list, "names")
+            else {idx["name"] for idx in index_list}
+        )
         if settings.pinecone_index not in existing:
             client.create_index(
                 name=settings.pinecone_index,
