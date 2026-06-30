@@ -13,7 +13,9 @@ from typing import Annotated
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from finsight_common import __version__, get_settings
-from finsight_common.categorize import categorize_statement
+from finsight_common.categorize import categorize_by_rules
+from finsight_common.llm import get_provider
+from finsight_common.llm_categorize import llm_categorize
 from finsight_common.logging import configure_logging, get_logger
 from finsight_common.parsing import StatementParseError, parse_bytes
 from finsight_common.pii import redact_text
@@ -21,6 +23,11 @@ from finsight_common.pii import redact_text
 settings = get_settings()
 configure_logging(settings.log_level, json_logs=settings.environment != "local")
 log = get_logger("gateway")
+
+# One provider instance per process. NullProvider when Azure OpenAI isn't
+# configured, in which case we fall back to the deterministic rules categorizer.
+_provider = get_provider(settings)
+_categorizer = "llm" if settings.azure_openai_configured else "rules"
 
 app = FastAPI(title="FinSight Gateway", version=__version__)
 
@@ -73,15 +80,24 @@ async def parse_statement(file: Annotated[UploadFile, File()]) -> dict:
     except StatementParseError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-    # Redact PII from descriptions, then categorize.
+    # Redact PII from descriptions BEFORE anything external (incl. the LLM) sees them.
     for txn in statement.transactions:
         txn.description = redact_text(txn.description)
-    statement = categorize_statement(statement)
+
+    # Categorize: LLM when configured, deterministic rules otherwise.
+    descriptions = [t.description for t in statement.transactions]
+    if settings.azure_openai_configured:
+        categories = llm_categorize(descriptions, _provider)
+    else:
+        categories = [categorize_by_rules(d) for d in descriptions]
+    for txn, category in zip(statement.transactions, categories, strict=False):
+        txn.category = category
 
     log.info(
         "statement.parsed",
         filename=filename,
         transactions=len(statement.transactions),
+        categorizer=_categorizer,
     )
 
     return {
@@ -91,5 +107,6 @@ async def parse_statement(file: Annotated[UploadFile, File()]) -> dict:
             "total_inflow": float(statement.total_inflow),
             "total_outflow": float(statement.total_outflow),
             "net": float(statement.net),
+            "categorizer": _categorizer,
         },
     }
