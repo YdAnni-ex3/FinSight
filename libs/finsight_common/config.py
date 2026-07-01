@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     # Kafka / Redpanda
     kafka_bootstrap_servers: str = "localhost:9092"
 
+    # Snowflake (analytics warehouse + persistent transaction store)
+    snowflake_account: str | None = None
+    snowflake_user: str | None = None
+    snowflake_password: str | None = None
+    snowflake_warehouse: str = "COMPUTE_WH"
+    snowflake_database: str = "FINSIGHT"
+    snowflake_schema: str = "ANALYTICS"
+    snowflake_role: str | None = None
+
     @property
     def azure_openai_configured(self) -> bool:
         """True when enough is set to make a live Azure OpenAI chat call."""
@@ -73,6 +82,11 @@ class Settings(BaseSettings):
             and self.azure_openai_api_key
             and self.azure_openai_embeddings_deployment
         )
+
+    @property
+    def snowflake_configured(self) -> bool:
+        """True when Snowflake credentials are present."""
+        return bool(self.snowflake_account and self.snowflake_user and self.snowflake_password)
 
 
 @lru_cache

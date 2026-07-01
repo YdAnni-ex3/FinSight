@@ -13,7 +13,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from finsight_common import __version__, get_settings
-from finsight_common.agent import FinanceAgent, TransactionStore
+from finsight_common.agent import FinanceAgent
 from finsight_common.analytics import spend_by_category
 from finsight_common.anomaly import detect_anomalies
 from finsight_common.categorize import categorize_by_rules
@@ -26,6 +26,7 @@ from finsight_common.parsing import StatementParseError, parse_bytes
 from finsight_common.pii import redact_text
 from finsight_common.rag import RagService
 from finsight_common.vectorstore import get_vector_store
+from finsight_common.warehouse import get_transaction_store
 from pydantic import BaseModel
 
 settings = get_settings()
@@ -48,8 +49,9 @@ _rag = RagService(
 )
 _retrieval = "pinecone" if settings.pinecone_api_key else "in-memory"
 
-# Agent orchestrator reasons over transactions accumulated as statements are analyzed.
-_txn_store = TransactionStore()
+# Persistent (Snowflake) or in-process transaction store; the agent reasons over it.
+_txn_store = get_transaction_store(settings)
+_store_kind = "snowflake" if settings.snowflake_configured else "in-memory"
 _agent = FinanceAgent(_txn_store, chat=_provider if settings.azure_openai_configured else None)
 
 app = FastAPI(title="FinSight Gateway", version=__version__)
@@ -76,7 +78,12 @@ def healthz() -> dict[str, str]:
 
 @app.get("/readyz")
 def readyz() -> dict[str, object]:
-    return {"status": "ready", "azure_openai_configured": settings.azure_openai_configured}
+    return {
+        "status": "ready",
+        "azure_openai_configured": settings.azure_openai_configured,
+        "transaction_store": _store_kind,
+        "retrieval": _retrieval,
+    }
 
 
 @app.get("/")
@@ -154,7 +161,7 @@ async def analyze_statement(file: Annotated[UploadFile, File()]) -> dict:
     filename, statement = await _process_upload(file)
     anomalies = detect_anomalies(statement)
     indexed = _rag.index_statement(statement, source_id=filename)
-    _txn_store.add(statement.transactions)
+    _txn_store.add(statement.transactions, source_id=filename)
     log.info(
         "statement.analyzed",
         filename=filename,
@@ -198,3 +205,10 @@ def agent_query(payload: QueryRequest) -> dict:
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="question is required")
     return _agent.run(payload.question).model_dump()
+
+
+@app.get("/api/analytics/spend")
+def analytics_spend() -> dict:
+    """Spend-by-category across ALL stored statements (uses the persistent store)."""
+    statement = Statement(transactions=_txn_store.all())
+    return {"store": _store_kind, "by_category": spend_by_category(statement)}

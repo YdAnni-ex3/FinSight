@@ -40,6 +40,10 @@ ai = [
     "azure-storage-blob>=12.20",
     "pinecone>=5.0",
 ]
+# Snowflake analytics warehouse
+snowflake = [
+    "snowflake-connector-python>=3.7",
+]
 dev = [
     "pytest>=8.1",
     "pytest-asyncio>=0.23",

@@ -43,6 +43,12 @@ $aoaiKey = az cognitiveservices account keys list -n $OpenAiName -g $ResourceGro
 $pineconeKey = (Select-String -Path .env -Pattern '^FINSIGHT_PINECONE_API_KEY=(.*)$').Matches.Groups[1].Value
 if (-not $pineconeKey) { throw "FINSIGHT_PINECONE_API_KEY not found in .env" }
 
+function Read-Env($name) { (Select-String -Path .env -Pattern "^$name=(.*)$").Matches.Groups[1].Value }
+$sfAccount = Read-Env "FINSIGHT_SNOWFLAKE_ACCOUNT"
+$sfUser = Read-Env "FINSIGHT_SNOWFLAKE_USER"
+$sfPassword = Read-Env "FINSIGHT_SNOWFLAKE_PASSWORD"
+
+$secrets = @("aoai-key=$aoaiKey", "pinecone-key=$pineconeKey")
 $envVars = @(
     "FINSIGHT_ENVIRONMENT=production",
     "FINSIGHT_AZURE_OPENAI_ENDPOINT=$endpoint",
@@ -58,6 +64,22 @@ $envVars = @(
     "FINSIGHT_CORS_ORIGIN_REGEX=https://finsight.*\.vercel\.app"
 )
 
+if ($sfAccount -and $sfUser -and $sfPassword) {
+    Write-Host "Snowflake: configured -> persistent star-schema store" -ForegroundColor Green
+    $secrets += "snowflake-password=$sfPassword"
+    $envVars += @(
+        "FINSIGHT_SNOWFLAKE_ACCOUNT=$sfAccount",
+        "FINSIGHT_SNOWFLAKE_USER=$sfUser",
+        "FINSIGHT_SNOWFLAKE_PASSWORD=secretref:snowflake-password",
+        "FINSIGHT_SNOWFLAKE_WAREHOUSE=COMPUTE_WH",
+        "FINSIGHT_SNOWFLAKE_DATABASE=FINSIGHT",
+        "FINSIGHT_SNOWFLAKE_SCHEMA=ANALYTICS"
+    )
+}
+else {
+    Write-Host "Snowflake: not configured -> in-memory store" -ForegroundColor Yellow
+}
+
 Step "Container Apps environment $EnvName ($Location)"
 $envExists = az containerapp env show -n $EnvName -g $ResourceGroup --query name -o tsv 2>$null
 $appExists = az containerapp show -n $AppName -g $ResourceGroup --query name -o tsv 2>$null
@@ -67,8 +89,7 @@ if (-not $envExists) {
 }
 
 if ($appExists) {    Step "Updating container app $AppName"
-    az containerapp secret set -n $AppName -g $ResourceGroup `
-        --secrets "aoai-key=$aoaiKey" "pinecone-key=$pineconeKey" | Out-Null
+    az containerapp secret set -n $AppName -g $ResourceGroup --secrets $secrets | Out-Null
     az containerapp update -n $AppName -g $ResourceGroup --image $Image --set-env-vars $envVars | Out-Null
 }
 else {
@@ -77,7 +98,7 @@ else {
         --environment $EnvName --image $Image `
         --target-port 8000 --ingress external `
         --min-replicas 0 --max-replicas 2 `
-        --secrets "aoai-key=$aoaiKey" "pinecone-key=$pineconeKey" `
+        --secrets $secrets `
         --env-vars $envVars `
         --tags $tag | Out-Null
 }

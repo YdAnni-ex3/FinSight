@@ -27,7 +27,8 @@ class TransactionStore:
     def __init__(self) -> None:
         self._transactions: list[Transaction] = []
 
-    def add(self, transactions: list[Transaction]) -> None:
+    def add(self, transactions: list[Transaction], source_id: str = "upload") -> None:
+        # source_id is accepted for interface parity with the Snowflake store.
         self._transactions.extend(transactions)
 
     def all(self) -> list[Transaction]:
