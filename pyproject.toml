@@ -48,8 +48,10 @@ dev = [
 ]
 
 [tool.setuptools]
-packages = ["finsight_common"]
 package-dir = { "" = "libs" }
+
+[tool.setuptools.packages.find]
+where = ["libs"]
 
 [tool.ruff]
 line-length = 100
