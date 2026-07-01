@@ -20,7 +20,8 @@ param(
     [string]$Image = "ghcr.io/ydanni-ex3/finsight-gateway:latest"
 )
 
-$ErrorActionPreference = "Stop"
+# Container Apps + az emit progress/warnings to stderr; don't treat those as fatal.
+$ErrorActionPreference = "Continue"
 $tag = "project=finsight"
 
 if (-not $SubscriptionId) { $SubscriptionId = az account show --query id -o tsv }
@@ -58,12 +59,8 @@ $envVars = @(
 )
 
 Step "Container Apps environment $EnvName ($Location)"
-# Detect-or-create without letting az stderr abort the script.
-$prev = $ErrorActionPreference
-$ErrorActionPreference = "Continue"
 $envExists = az containerapp env show -n $EnvName -g $ResourceGroup --query name -o tsv 2>$null
 $appExists = az containerapp show -n $AppName -g $ResourceGroup --query name -o tsv 2>$null
-$ErrorActionPreference = $prev
 
 if (-not $envExists) {
     az containerapp env create -n $EnvName -g $ResourceGroup --location $Location --tags $tag | Out-Null
