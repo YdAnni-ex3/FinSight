@@ -52,7 +52,9 @@ $envVars = @(
     "FINSIGHT_PINECONE_API_KEY=secretref:pinecone-key",
     "FINSIGHT_PINECONE_INDEX=finsight",
     "FINSIGHT_PINECONE_CLOUD=aws",
-    "FINSIGHT_PINECONE_REGION=us-east-1"
+    "FINSIGHT_PINECONE_REGION=us-east-1",
+    "FINSIGHT_CORS_ORIGINS=https://finsight-woad-beta.vercel.app",
+    "FINSIGHT_CORS_ORIGIN_REGEX=https://finsight.*\.vercel\.app"
 )
 
 Step "Container Apps environment $EnvName ($Location)"

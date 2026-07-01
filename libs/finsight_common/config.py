@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     environment: str = "local"
     log_level: str = "INFO"
 
+    # CORS: comma-separated allowed origins ("*" = allow all, dev only).
+    cors_origins: str = "*"
+    cors_origin_regex: str | None = None
+
     # Postgres (serving / OLTP store)
     database_url: str = "postgresql://finsight:finsight@localhost:5432/finsight"
 

@@ -13,6 +13,8 @@ from typing import Annotated
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from finsight_common import __version__, get_settings
+from finsight_common.analytics import spend_by_category
+from finsight_common.anomaly import detect_anomalies
 from finsight_common.categorize import categorize_by_rules
 from finsight_common.embeddings import get_embedding_provider
 from finsight_common.llm import get_provider
@@ -47,10 +49,13 @@ _retrieval = "pinecone" if settings.pinecone_api_key else "in-memory"
 
 app = FastAPI(title="FinSight Gateway", version=__version__)
 
-# Allow the local + deployed frontend to call the API. Tighten origins for prod.
+# CORS: "*" for local dev; in production set FINSIGHT_CORS_ORIGINS to the Vercel
+# domain and FINSIGHT_CORS_ORIGIN_REGEX to also allow preview deployments.
+_cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -136,6 +141,36 @@ async def index_statement(file: Annotated[UploadFile, File()]) -> dict:
     indexed = _rag.index_statement(statement, source_id=filename)
     log.info("statement.indexed", filename=filename, indexed=indexed, retrieval=_retrieval)
     return {"indexed": indexed, "retrieval": _retrieval}
+
+
+@app.post("/api/statements/analyze")
+async def analyze_statement(file: Annotated[UploadFile, File()]) -> dict:
+    """Parse and categorize, compute spend-by-category and anomalies, and index for Q&A."""
+    filename, statement = await _process_upload(file)
+    anomalies = detect_anomalies(statement)
+    indexed = _rag.index_statement(statement, source_id=filename)
+    log.info(
+        "statement.analyzed",
+        filename=filename,
+        transactions=len(statement.transactions),
+        anomalies=len(anomalies),
+        indexed=indexed,
+    )
+    return {
+        "statement": statement.model_dump(mode="json"),
+        "summary": {
+            "transaction_count": len(statement.transactions),
+            "total_inflow": float(statement.total_inflow),
+            "total_outflow": float(statement.total_outflow),
+            "net": float(statement.net),
+            "categorizer": _categorizer,
+            "anomaly_count": len(anomalies),
+            "indexed": indexed,
+            "retrieval": _retrieval,
+        },
+        "by_category": spend_by_category(statement),
+        "anomalies": [a.model_dump() for a in anomalies],
+    }
 
 
 class QueryRequest(BaseModel):

@@ -69,3 +69,16 @@ def test_index_and_query_flow():
 
 def test_query_requires_question():
     assert client.post("/api/query", json={"question": "   "}).status_code == 400
+
+
+def test_analyze_returns_categories_anomalies_and_breakdown():
+    resp = client.post(
+        "/api/statements/analyze",
+        files={"file": ("march.csv", _CSV, "text/csv")},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["summary"]["transaction_count"] == 2
+    assert "anomaly_count" in body["summary"]
+    assert isinstance(body["by_category"], dict)
+    assert isinstance(body["anomalies"], list)
