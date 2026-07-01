@@ -53,6 +53,7 @@ export default function Home() {
 
   const [question, setQuestion] = useState("How much did I spend on food?");
   const [answer, setAnswer] = useState<string | null>(null);
+  const [steps, setSteps] = useState<{ tool: string }[]>([]);
   const [asking, setAsking] = useState(false);
 
   async function onAnalyze(e: React.FormEvent) {
@@ -62,6 +63,7 @@ export default function Home() {
     setError(null);
     setResult(null);
     setAnswer(null);
+    setSteps([]);
     try {
       const body = new FormData();
       body.append("file", file);
@@ -83,14 +85,16 @@ export default function Home() {
     if (!question.trim()) return;
     setAsking(true);
     setAnswer(null);
+    setSteps([]);
     try {
-      const res = await fetch(`${API_URL}/api/query`, {
+      const res = await fetch(`${API_URL}/api/agent`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, top_k: 5 }),
+        body: JSON.stringify({ question }),
       });
       const data = await res.json();
       setAnswer(data.answer ?? "No answer.");
+      setSteps(Array.isArray(data.steps) ? data.steps : []);
     } catch {
       setAnswer("Something went wrong.");
     } finally {
@@ -199,9 +203,22 @@ export default function Home() {
               </button>
             </form>
             {answer && (
-              <p className="mt-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm">
-                {answer}
-              </p>
+              <div className="mt-3 rounded-md border border-slate-200 bg-white px-4 py-3 text-sm">
+                <p>{answer}</p>
+                {steps.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1 text-xs text-slate-500">
+                    <span>tools:</span>
+                    {steps.map((s, i) => (
+                      <span
+                        key={i}
+                        className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-slate-600"
+                      >
+                        {s.tool}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </section>
 

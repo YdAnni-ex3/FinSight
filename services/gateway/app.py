@@ -13,6 +13,7 @@ from typing import Annotated
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from finsight_common import __version__, get_settings
+from finsight_common.agent import FinanceAgent, TransactionStore
 from finsight_common.analytics import spend_by_category
 from finsight_common.anomaly import detect_anomalies
 from finsight_common.categorize import categorize_by_rules
@@ -46,6 +47,10 @@ _rag = RagService(
     chat=_provider if settings.azure_openai_configured else None,
 )
 _retrieval = "pinecone" if settings.pinecone_api_key else "in-memory"
+
+# Agent orchestrator reasons over transactions accumulated as statements are analyzed.
+_txn_store = TransactionStore()
+_agent = FinanceAgent(_txn_store, chat=_provider if settings.azure_openai_configured else None)
 
 app = FastAPI(title="FinSight Gateway", version=__version__)
 
@@ -149,6 +154,7 @@ async def analyze_statement(file: Annotated[UploadFile, File()]) -> dict:
     filename, statement = await _process_upload(file)
     anomalies = detect_anomalies(statement)
     indexed = _rag.index_statement(statement, source_id=filename)
+    _txn_store.add(statement.transactions)
     log.info(
         "statement.analyzed",
         filename=filename,
@@ -184,3 +190,11 @@ def query(payload: QueryRequest) -> dict:
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="question is required")
     return _rag.query(payload.question, top_k=payload.top_k)
+
+
+@app.post("/api/agent")
+def agent_query(payload: QueryRequest) -> dict:
+    """Answer a question with the tool-using finance agent (returns answer + steps)."""
+    if not payload.question.strip():
+        raise HTTPException(status_code=400, detail="question is required")
+    return _agent.run(payload.question).model_dump()

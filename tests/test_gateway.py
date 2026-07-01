@@ -82,3 +82,13 @@ def test_analyze_returns_categories_anomalies_and_breakdown():
     assert "anomaly_count" in body["summary"]
     assert isinstance(body["by_category"], dict)
     assert isinstance(body["anomalies"], list)
+
+
+def test_agent_answers_over_analyzed_statement():
+    client.post("/api/statements/analyze", files={"file": ("march.csv", _CSV, "text/csv")})
+    resp = client.post("/api/agent", json={"question": "how much did I spend in total?"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer"]
+    assert isinstance(body["steps"], list)
+    assert body["steps"][0]["tool"] == "total_spend"
