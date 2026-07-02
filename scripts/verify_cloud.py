@@ -39,6 +39,48 @@ def main() -> None:
         )
         print(f"\npinecone indexes: {list(names)}")
 
+    if settings.snowflake_configured:
+        from datetime import date
+        from decimal import Decimal
+
+        from finsight_common.models import Category, Transaction
+        from finsight_common.warehouse import get_transaction_store
+
+        store = get_transaction_store(settings)
+        before = len(store.all())
+        store.add(
+            [
+                Transaction(
+                    txn_date=date(2024, 1, 1),
+                    description="verify ping",
+                    amount=Decimal("-1"),
+                    category=Category.OTHER,
+                )
+            ],
+            source_id="__verify__",
+        )
+        after = len(store.all())
+        print(
+            f"\nsnowflake store ({store.__class__.__name__}): "
+            f"{before} -> {after} rows (round-trip OK)"
+        )
+
+        import snowflake.connector
+
+        conn = snowflake.connector.connect(
+            account=settings.snowflake_account,
+            user=settings.snowflake_user,
+            password=settings.snowflake_password,
+            warehouse=settings.snowflake_warehouse,
+            database=settings.snowflake_database,
+            schema=settings.snowflake_schema,
+            role=settings.snowflake_role or None,
+        )
+        conn.cursor().execute("DELETE FROM FACT_TRANSACTION WHERE source_file = '__verify__'")
+        conn.commit()
+        conn.close()
+        print("snowflake store: verify row cleaned up")
+
     print("\nOK: cloud wiring verified.")
 
 
