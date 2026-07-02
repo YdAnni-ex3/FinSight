@@ -65,6 +65,12 @@ class Settings(BaseSettings):
     snowflake_schema: str = "ANALYTICS"
     snowflake_role: str | None = None
 
+    # AWS Bedrock (multi-cloud LLM; credentials via the standard AWS chain)
+    aws_region: str = "us-east-1"
+    bedrock_chat_model: str | None = None
+    bedrock_embed_model: str = "amazon.titan-embed-text-v2:0"
+    llm_provider: str = "auto"  # "auto" | "azure" | "bedrock"
+
     @property
     def azure_openai_configured(self) -> bool:
         """True when enough is set to make a live Azure OpenAI chat call."""
@@ -87,6 +93,11 @@ class Settings(BaseSettings):
     def snowflake_configured(self) -> bool:
         """True when Snowflake credentials are present."""
         return bool(self.snowflake_account and self.snowflake_user and self.snowflake_password)
+
+    @property
+    def bedrock_configured(self) -> bool:
+        """True when an AWS Bedrock chat model is configured."""
+        return bool(self.bedrock_chat_model)
 
 
 @lru_cache

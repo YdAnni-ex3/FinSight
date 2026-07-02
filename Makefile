@@ -14,7 +14,7 @@ help:
 	@echo "gen-data  - generate synthetic statements into data/synthetic/"
 
 install:
-	uv sync --extra dev --extra data --extra ai --extra pii --extra snowflake
+	uv sync --extra dev --extra data --extra ai --extra pii --extra snowflake --extra aws
 
 dev:
 	uv run uvicorn services.gateway.app:app --reload --port 8000

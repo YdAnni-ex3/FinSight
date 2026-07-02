@@ -11,7 +11,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY libs ./libs
 COPY services ./services
-RUN pip install ".[data,ai,snowflake]"
+RUN pip install ".[data,ai,snowflake,aws]"
 
 # Run as a non-root user.
 RUN useradd --create-home appuser
