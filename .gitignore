@@ -42,6 +42,11 @@ data/synthetic/
 data/kaggle/
 *.csv.gz
 
+# ---- MLflow tracking (local runs; the trained model in models/ IS committed) ----
+mlruns/
+mlartifacts/
+mlflow.db
+
 # ---- Editor / OS ----
 .vscode/
 .idea/

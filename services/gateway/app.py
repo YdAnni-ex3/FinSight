@@ -15,7 +15,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from finsight_common import __version__, get_settings
 from finsight_common.agent import FinanceAgent
 from finsight_common.analytics import spend_by_category
-from finsight_common.anomaly import detect_anomalies
+from finsight_common.anomaly import (
+    combine_anomalies,
+    detect_anomalies,
+    detect_ml_anomalies,
+    load_anomaly_model,
+)
 from finsight_common.categorize import categorize_by_rules
 from finsight_common.embeddings import get_embedding_provider
 from finsight_common.llm import get_provider
@@ -28,6 +33,15 @@ from finsight_common.rag import RagService
 from finsight_common.vectorstore import get_vector_store
 from finsight_common.warehouse import get_transaction_store
 from pydantic import BaseModel
+
+from .metrics import (
+    AGENT_QUERIES,
+    ANOMALIES_DETECTED,
+    STATEMENTS_ANALYZED,
+    TRANSACTIONS_INGESTED,
+    UPLOAD_PROCESSING,
+    setup_metrics,
+)
 
 settings = get_settings()
 configure_logging(settings.log_level, json_logs=settings.environment != "local")
@@ -54,7 +68,14 @@ _txn_store = get_transaction_store(settings)
 _store_kind = "snowflake" if settings.snowflake_configured else "in-memory"
 _agent = FinanceAgent(_txn_store, chat=_provider if settings.azure_openai_configured else None)
 
+# Trained IsolationForest for anomaly detection; None (rules only) if unavailable.
+_anomaly_model = load_anomaly_model(settings.anomaly_model_path)
+_anomaly_ml = "isolation_forest" if _anomaly_model is not None else "disabled"
+
 app = FastAPI(title="FinSight Gateway", version=__version__)
+
+# Prometheus /metrics + standard HTTP request/latency series (no-op without obs extra).
+setup_metrics(app)
 
 # CORS: "*" for local dev; in production set FINSIGHT_CORS_ORIGINS to the Vercel
 # domain and FINSIGHT_CORS_ORIGIN_REGEX to also allow preview deployments.
@@ -83,6 +104,7 @@ def readyz() -> dict[str, object]:
         "azure_openai_configured": settings.azure_openai_configured,
         "transaction_store": _store_kind,
         "retrieval": _retrieval,
+        "anomaly_ml": _anomaly_ml,
     }
 
 
@@ -158,15 +180,27 @@ async def index_statement(file: Annotated[UploadFile, File()]) -> dict:
 @app.post("/api/statements/analyze")
 async def analyze_statement(file: Annotated[UploadFile, File()]) -> dict:
     """Parse and categorize, compute spend-by-category and anomalies, and index for Q&A."""
-    filename, statement = await _process_upload(file)
-    anomalies = detect_anomalies(statement)
+    with UPLOAD_PROCESSING.time():
+        filename, statement = await _process_upload(file)
+
+    anomalies = combine_anomalies(
+        detect_anomalies(statement),
+        detect_ml_anomalies(statement, _anomaly_model),
+    )
     indexed = _rag.index_statement(statement, source_id=filename)
     _txn_store.add(statement.transactions, source_id=filename)
+
+    STATEMENTS_ANALYZED.inc()
+    TRANSACTIONS_INGESTED.inc(len(statement.transactions))
+    for anomaly in anomalies:
+        ANOMALIES_DETECTED.labels(type=anomaly.type).inc()
+
     log.info(
         "statement.analyzed",
         filename=filename,
         transactions=len(statement.transactions),
         anomalies=len(anomalies),
+        anomaly_ml=_anomaly_ml,
         indexed=indexed,
     )
     return {
@@ -178,6 +212,7 @@ async def analyze_statement(file: Annotated[UploadFile, File()]) -> dict:
             "net": float(statement.net),
             "categorizer": _categorizer,
             "anomaly_count": len(anomalies),
+            "anomaly_ml": _anomaly_ml,
             "indexed": indexed,
             "retrieval": _retrieval,
         },
@@ -204,6 +239,7 @@ def agent_query(payload: QueryRequest) -> dict:
     """Answer a question with the tool-using finance agent (returns answer + steps)."""
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="question is required")
+    AGENT_QUERIES.inc()
     return _agent.run(payload.question).model_dump()
 
 

@@ -1,0 +1,19 @@
+# Prometheus scrape config for the FinSight gateway.
+# The gateway exposes /metrics (prometheus-fastapi-instrumentator). When you run
+# the API locally with `make dev` it listens on the host at :8000, which the
+# Prometheus container reaches via host.docker.internal (Docker Desktop).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: finsight-gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+        labels:
+          service: finsight-gateway
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

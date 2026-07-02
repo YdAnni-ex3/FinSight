@@ -7,11 +7,12 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
-# Install the shared library + runtime extras (parsing + cloud), not dev tools.
+# Install the shared library + runtime extras (parsing + cloud + ML + metrics), not dev tools.
 COPY pyproject.toml README.md ./
 COPY libs ./libs
 COPY services ./services
-RUN pip install ".[data,ai,snowflake,aws]"
+COPY models ./models
+RUN pip install ".[data,ai,snowflake,aws,ml,obs]"
 
 # Run as a non-root user.
 RUN useradd --create-home appuser

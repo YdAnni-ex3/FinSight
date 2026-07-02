@@ -1,10 +1,10 @@
 # FinSight developer shortcuts.
 # On Windows, run these from Git Bash / WSL, or run the underlying commands directly.
 
-.PHONY: help install dev test lint fmt up down gen-data clean
+.PHONY: help install dev test lint fmt up down gen-data train mlflow-ui obs-up obs-down clean
 
 help:
-	@echo "install   - install all deps (uv) incl. data/ai/pii/dev extras"
+	@echo "install   - install all deps (uv) incl. data/ai/pii/ml/obs/dev extras"
 	@echo "dev       - run the gateway API with autoreload on :8000"
 	@echo "test      - run pytest"
 	@echo "lint      - ruff check"
@@ -12,9 +12,13 @@ help:
 	@echo "up        - start local stack (postgres, azurite, redpanda)"
 	@echo "down      - stop local stack"
 	@echo "gen-data  - generate synthetic statements into data/synthetic/"
+	@echo "train     - train the anomaly model + log to MLflow (./mlruns)"
+	@echo "mlflow-ui - open the MLflow experiment UI on :5000"
+	@echo "obs-up    - start Prometheus (:9090) + Grafana (:3001)"
+	@echo "obs-down  - stop Prometheus + Grafana"
 
 install:
-	uv sync --extra dev --extra data --extra ai --extra pii --extra snowflake --extra aws
+	uv sync --extra dev --extra data --extra ai --extra snowflake --extra aws --extra ml --extra mlops --extra obs
 
 dev:
 	uv run uvicorn services.gateway.app:app --reload --port 8000
@@ -36,6 +40,18 @@ down:
 
 gen-data:
 	uv run python scripts/generate_synthetic_statements.py --count 5
+
+train:
+	uv run python scripts/train_anomaly_model.py
+
+mlflow-ui:
+	uv run mlflow ui --backend-store-uri sqlite:///mlflow.db
+
+obs-up:
+	docker compose up -d prometheus grafana
+
+obs-down:
+	docker compose stop prometheus grafana
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache **/__pycache__

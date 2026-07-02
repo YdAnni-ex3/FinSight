@@ -1,0 +1,13 @@
+# Load dashboard JSON files from disk on startup.
+apiVersion: 1
+
+providers:
+  - name: FinSight
+    orgId: 1
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

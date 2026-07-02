@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     bedrock_embed_model: str = "amazon.titan-embed-text-v2:0"
     llm_provider: str = "auto"  # "auto" | "azure" | "bedrock"
 
+    # Anomaly ML model (IsolationForest). A missing file disables the ML layer;
+    # the rule-based detector still runs.
+    anomaly_model_path: str = "models/anomaly_isoforest.joblib"
+
     @property
     def azure_openai_configured(self) -> bool:
         """True when enough is set to make a live Azure OpenAI chat call."""
