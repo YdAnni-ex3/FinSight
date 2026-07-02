@@ -1,0 +1,54 @@
+# Databricks Asset Bundle job definition.
+# Deploy with: databricks bundle deploy  (requires Databricks CLI v0.205+)
+# Run with:    databricks bundle run finsight_medallion_pipeline
+
+bundle:
+  name: finsight
+
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+
+resources:
+  jobs:
+    finsight_medallion_pipeline:
+      name: "FinSight Medallion Pipeline"
+      trigger:
+        # Run daily; also runs on-demand via the UI or after /api/statements/analyze.
+        periodic:
+          interval: 1
+          unit: DAYS
+      tasks:
+        - task_key: bronze_ingest
+          notebook_task:
+            notebook_path: ./notebooks/01_bronze_ingest
+            source: WORKSPACE
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 1
+
+        - task_key: silver_transform
+          depends_on:
+            - task_key: bronze_ingest
+          notebook_task:
+            notebook_path: ./notebooks/02_silver_transform
+            source: WORKSPACE
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 1
+
+        - task_key: gold_load
+          depends_on:
+            - task_key: silver_transform
+          notebook_task:
+            notebook_path: ./notebooks/03_gold_load
+            source: WORKSPACE
+          new_cluster:
+            spark_version: "15.4.x-scala2.12"
+            node_type_id: "Standard_DS3_v2"
+            num_workers: 1
