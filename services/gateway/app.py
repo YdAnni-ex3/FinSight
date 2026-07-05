@@ -105,6 +105,7 @@ def readyz() -> dict[str, object]:
         "transaction_store": _store_kind,
         "retrieval": _retrieval,
         "anomaly_ml": _anomaly_ml,
+        "git_sha": settings.git_sha,
     }
 
 

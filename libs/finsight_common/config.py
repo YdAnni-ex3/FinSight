@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     environment: str = "local"
     log_level: str = "INFO"
+    git_sha: str = "dev"  # set at image build; surfaced by /readyz for deploy traceability
 
     # CORS: comma-separated allowed origins ("*" = allow all, dev only).
     cors_origins: str = "*"

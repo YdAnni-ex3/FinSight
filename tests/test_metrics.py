@@ -27,3 +27,4 @@ def test_readyz_reports_anomaly_ml_field():
     body = client.get("/readyz").json()
     assert "anomaly_ml" in body
     assert body["anomaly_ml"] in {"isolation_forest", "disabled"}
+    assert "git_sha" in body

@@ -1,9 +1,11 @@
 # FinSight gateway image. Built in the cloud via `az acr build` (no local Docker needed).
 FROM python:3.11-slim
 
+ARG GIT_SHA=dev
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    FINSIGHT_GIT_SHA=$GIT_SHA
 
 WORKDIR /app
 
