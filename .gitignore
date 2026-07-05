@@ -54,6 +54,9 @@ services/**/bin/
 services/**/obj/
 .func/
 
+# ---- Local tools (downloaded binaries, e.g. Grafana Alloy) ----
+.tools/
+
 # ---- Editor / OS ----
 .vscode/
 .idea/
