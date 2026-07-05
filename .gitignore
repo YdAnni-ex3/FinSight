@@ -57,6 +57,9 @@ services/**/obj/
 # ---- Local tools (downloaded binaries, e.g. Grafana Alloy) ----
 .tools/
 
+# ---- Grafana Alloy local runtime state (WAL, seed) ----
+data-alloy/
+
 # ---- Editor / OS ----
 .vscode/
 .idea/
