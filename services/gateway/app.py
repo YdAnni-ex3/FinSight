@@ -101,6 +101,7 @@ def healthz() -> dict[str, str]:
 def readyz() -> dict[str, object]:
     return {
         "status": "ready",
+        "llm_provider": _provider.name,
         "azure_openai_configured": settings.azure_openai_configured,
         "transaction_store": _store_kind,
         "retrieval": _retrieval,

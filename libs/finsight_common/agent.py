@@ -73,6 +73,8 @@ def _tool_total_spend(
     since: str | None = None,
     until: str | None = None,
 ) -> dict:
+    if category in (None, "", "all", "any", "total", "everything"):
+        category = None
     total = 0.0
     count = 0
     for txn in store.all():
@@ -149,13 +151,42 @@ class AgentResult(BaseModel):
 
 
 def _parse_action(text: str) -> dict | None:
-    match = _JSON_OBJECT.search(text)
-    if not match:
+    """Extract one JSON object from an LLM reply.
+
+    Tolerant of markdown code fences and trailing prose, and prefers the first
+    brace-balanced object so a malformed tail doesn't poison a valid head.
+    Returns ``None`` when no valid JSON object is present.
+    """
+    if not text:
         return None
-    try:
-        return json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return None
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```\s*$", "", cleaned).strip()
+
+    start = cleaned.find("{")
+    if start != -1:
+        depth = 0
+        for i in range(start, len(cleaned)):
+            if cleaned[i] == "{":
+                depth += 1
+            elif cleaned[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        parsed = json.loads(cleaned[start : i + 1])
+                        return parsed if isinstance(parsed, dict) else None
+                    except json.JSONDecodeError:
+                        break
+
+    match = _JSON_OBJECT.search(cleaned)
+    if match:
+        try:
+            parsed = json.loads(match.group(0))
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            return None
+    return None
 
 
 def _clean_args(tool: str, args: dict) -> dict:
@@ -210,11 +241,27 @@ class FinanceAgent:
             ChatMessage(role="user", content=question),
         ]
         steps: list[AgentStep] = []
+        parse_failures = 0
         for _ in range(self._max_steps):
             raw = self._chat.chat(messages)
             action = _parse_action(raw)
             if not action:
-                return AgentResult(answer=raw.strip(), steps=steps)
+                # No valid JSON. Nudge the model once, then fall back to the
+                # deterministic router -- never surface raw text/JSON as the answer.
+                parse_failures += 1
+                if parse_failures >= 2:
+                    return self._fallback(question)
+                messages.append(ChatMessage(role="assistant", content=raw))
+                messages.append(
+                    ChatMessage(
+                        role="user",
+                        content=(
+                            "That was not valid JSON. Reply with exactly one JSON object "
+                            'like {"action":"answer","answer":"..."} and nothing else.'
+                        ),
+                    )
+                )
+                continue
             if action.get("action") == "answer":
                 return AgentResult(answer=str(action.get("answer", "")).strip(), steps=steps)
 

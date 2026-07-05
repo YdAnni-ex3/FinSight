@@ -129,3 +129,26 @@ def test_llm_error_falls_back_to_router():
 def test_empty_statement_helper_stays_safe():
     result = FinanceAgent(TransactionStore()).run("how much did I spend?")
     assert result.steps[0].result["total"] == 0.0
+
+
+def test_llm_malformed_json_falls_back_to_router():
+    # Nova-style malformed JSON (missing quote) must never surface as raw text;
+    # after one retry the agent falls back to the deterministic router.
+    bad = '{"action":"tool","tool":"total_spend","arguments":{"category":"all}}'
+    provider = ScriptedProvider([bad, bad, bad, bad])
+    result = FinanceAgent(_store(), chat=provider).run("how much did I spend in total?")
+    assert result.steps and result.steps[0].tool == "total_spend"
+    assert "{" not in result.answer
+    assert result.steps[0].result["total"] == 67450.0  # 450 + 2000 + 65000
+
+
+def test_llm_json_in_code_fence_is_parsed():
+    provider = ScriptedProvider(
+        [
+            '```json\n{"action":"tool","tool":"list_anomalies","arguments":{}}\n```',
+            '{"action":"answer","answer":"one anomaly"}',
+        ]
+    )
+    result = FinanceAgent(_store(), chat=provider).run("anomalies?")
+    assert result.steps and result.steps[0].tool == "list_anomalies"
+    assert result.answer == "one anomaly"
