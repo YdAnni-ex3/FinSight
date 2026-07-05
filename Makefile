@@ -1,7 +1,7 @@
 # FinSight developer shortcuts.
 # On Windows, run these from Git Bash / WSL, or run the underlying commands directly.
 
-.PHONY: help install dev test lint fmt up down gen-data train mlflow-ui obs-up obs-down clean
+.PHONY: help install dev test lint fmt up down gen-data train mlflow-ui obs-up obs-down grafana-cloud clean
 
 help:
 	@echo "install   - install all deps (uv) incl. data/ai/pii/ml/obs/dev extras"
@@ -16,6 +16,7 @@ help:
 	@echo "mlflow-ui - open the MLflow experiment UI on :5000"
 	@echo "obs-up    - start Prometheus (:9090) + Grafana (:3001)"
 	@echo "obs-down  - stop Prometheus + Grafana"
+	@echo "grafana-cloud - ship live gateway metrics to Grafana Cloud (needs GRAFANA_CLOUD_* in .env)"
 
 install:
 	uv sync --extra dev --extra data --extra ai --extra snowflake --extra aws --extra ml --extra mlops --extra obs
@@ -52,6 +53,9 @@ obs-up:
 
 obs-down:
 	docker compose stop prometheus grafana
+
+grafana-cloud:
+	docker compose --profile cloud up alloy
 
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache **/__pycache__

@@ -81,6 +81,25 @@ services:
     depends_on:
       - prometheus
 
+  # Grafana Alloy — ships the live gateway's metrics to Grafana Cloud (hosted
+  # dashboard). Opt-in: only starts with `--profile cloud` and needs the
+  # GRAFANA_CLOUD_* vars in .env. Run: docker compose --profile cloud up alloy
+  alloy:
+    image: grafana/alloy:latest
+    container_name: finsight-alloy
+    profiles: ["cloud"]
+    command: ["run", "--server.http.listen-addr=0.0.0.0:12345", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      GATEWAY_METRICS_HOST: ${GATEWAY_METRICS_HOST:-}
+      GATEWAY_METRICS_SCHEME: ${GATEWAY_METRICS_SCHEME:-}
+      GRAFANA_CLOUD_PROM_URL: ${GRAFANA_CLOUD_PROM_URL:-}
+      GRAFANA_CLOUD_PROM_USER: ${GRAFANA_CLOUD_PROM_USER:-}
+      GRAFANA_CLOUD_API_KEY: ${GRAFANA_CLOUD_API_KEY:-}
+    ports:
+      - "12345:12345"
+
 volumes:
   pgdata:
   azurite:
