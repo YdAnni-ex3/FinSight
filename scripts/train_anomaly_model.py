@@ -16,11 +16,12 @@ Examples
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal
 from pathlib import Path
 
 from finsight_common.categorize import categorize_by_rules
 from finsight_common.ml import AnomalyModel, statement_feature_matrix
-from finsight_common.models import Statement
+from finsight_common.models import Category, Statement, Transaction
 from finsight_common.parsing import parse_bytes
 from finsight_common.pii import redact_text
 
@@ -38,6 +39,51 @@ def _load_statements(data_dir: Path) -> list[Statement]:
     return statements
 
 
+# Kaggle "Credit card transactions - India" Exp Type -> our canonical categories.
+_EXP_TYPE_TO_CATEGORY = {
+    "Bills": Category.UTILITIES,
+    "Food": Category.DINING,
+    "Grocery": Category.GROCERIES,
+    "Fuel": Category.TRANSPORT,
+    "Entertainment": Category.ENTERTAINMENT,
+    "Travel": Category.TRAVEL,
+}
+
+
+def _load_kaggle_india_cc(path: Path) -> list[Statement]:
+    """Load the 'Credit card transactions - India' dataset into pseudo-statements.
+
+    Real transactions are grouped by (city, month) so each group behaves like a
+    single account's monthly statement -- which is what the within-statement
+    feature normalization (ratios/z-scores vs. that statement) expects.
+    """
+    import pandas as pd
+
+    df = pd.read_csv(path).rename(columns={"Exp Type": "ExpType", "Card Type": "CardType"})
+    df["Date"] = pd.to_datetime(df["Date"], format="%d-%b-%y", errors="coerce")
+    df = df.dropna(subset=["Date", "Amount"])
+    df["ym"] = df["Date"].dt.to_period("M").astype(str)
+
+    statements: list[Statement] = []
+    for _, group in df.groupby(["City", "ym"]):
+        transactions: list[Transaction] = []
+        for row in group.itertuples(index=False):
+            exp_type = str(row.ExpType)
+            description = redact_text(f"{exp_type} spend {row.CardType} card {row.City}")
+            category = _EXP_TYPE_TO_CATEGORY.get(exp_type) or categorize_by_rules(description)
+            transactions.append(
+                Transaction(
+                    txn_date=row.Date.date(),
+                    description=description,
+                    amount=Decimal(str(-abs(int(row.Amount)))),
+                    category=category,
+                )
+            )
+        if len(transactions) >= 5:
+            statements.append(Statement(transactions=transactions))
+    return statements
+
+
 def _build_matrix(statements: list[Statement]) -> list[list[float]]:
     matrix: list[list[float]] = []
     for statement in statements:
@@ -52,11 +98,20 @@ def main() -> None:
     parser.add_argument("--out", default=str(REPO_ROOT / "models" / "anomaly_isoforest.joblib"))
     parser.add_argument("--contamination", type=float, default=0.03)
     parser.add_argument("--n-estimators", type=int, default=150)
+    parser.add_argument("--kaggle-csv", default=None, help="path to the India credit-card CSV")
     parser.add_argument("--no-mlflow", action="store_true", help="skip MLflow tracking")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
     statements = _load_statements(data_dir)
+    if args.kaggle_csv:
+        kaggle_path = Path(args.kaggle_csv)
+        if kaggle_path.exists():
+            kaggle_statements = _load_kaggle_india_cc(kaggle_path)
+            print(f"Loaded {len(kaggle_statements)} pseudo-statements from {kaggle_path.name}")
+            statements += kaggle_statements
+        else:
+            print(f"Kaggle CSV not found: {kaggle_path}")
     if not statements:
         raise SystemExit(
             f"No statements found in {data_dir}. Run: "

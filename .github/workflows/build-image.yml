@@ -8,6 +8,7 @@ on:
     paths:
       - "services/gateway/**"
       - "libs/**"
+      - "models/**"
       - "pyproject.toml"
       - "README.md"
       - ".github/workflows/build-image.yml"
