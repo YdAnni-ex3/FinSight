@@ -80,6 +80,27 @@ else {
     Write-Host "Snowflake: not configured -> in-memory store" -ForegroundColor Yellow
 }
 
+# AWS Bedrock (multi-cloud LLM): activate when creds + a chat model are in .env.
+$awsKeyId = Read-Env "AWS_ACCESS_KEY_ID"
+$awsSecret = Read-Env "AWS_SECRET_ACCESS_KEY"
+$bedrockModel = Read-Env "FINSIGHT_BEDROCK_CHAT_MODEL"
+if ($awsKeyId -and $awsSecret -and $bedrockModel) {
+    $awsRegion = Read-Env "FINSIGHT_AWS_REGION"; if (-not $awsRegion) { $awsRegion = "us-east-1" }
+    $llmProvider = Read-Env "FINSIGHT_LLM_PROVIDER"; if (-not $llmProvider) { $llmProvider = "bedrock" }
+    Write-Host "AWS Bedrock: configured -> LLM provider '$llmProvider' ($bedrockModel)" -ForegroundColor Green
+    $secrets += @("aws-access-key-id=$awsKeyId", "aws-secret-access-key=$awsSecret")
+    $envVars += @(
+        "AWS_ACCESS_KEY_ID=secretref:aws-access-key-id",
+        "AWS_SECRET_ACCESS_KEY=secretref:aws-secret-access-key",
+        "FINSIGHT_AWS_REGION=$awsRegion",
+        "FINSIGHT_BEDROCK_CHAT_MODEL=$bedrockModel",
+        "FINSIGHT_LLM_PROVIDER=$llmProvider"
+    )
+}
+else {
+    Write-Host "AWS Bedrock: not configured -> single-cloud (Azure) LLM" -ForegroundColor Yellow
+}
+
 Step "Container Apps environment $EnvName ($Location)"
 $envExists = az containerapp env show -n $EnvName -g $ResourceGroup --query name -o tsv 2>$null
 $appExists = az containerapp show -n $AppName -g $ResourceGroup --query name -o tsv 2>$null
