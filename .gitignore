@@ -47,6 +47,13 @@ mlruns/
 mlartifacts/
 mlflow.db
 
+# ---- Azure Functions (local settings hold secrets; build artifacts) ----
+local.settings.json
+services/**/.python_packages/
+services/**/bin/
+services/**/obj/
+.func/
+
 # ---- Editor / OS ----
 .vscode/
 .idea/

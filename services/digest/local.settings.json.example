@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "GATEWAY_URL": "https://finsight-gateway.icymeadow-7a1423f4.centralindia.azurecontainerapps.io",
+    "DIGEST_WEBHOOK_URL": "",
+    "DIGEST_TIMEOUT_SECONDS": "60"
+  }
+}

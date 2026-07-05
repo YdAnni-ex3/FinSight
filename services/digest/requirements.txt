@@ -1,0 +1,3 @@
+# Azure Functions Python worker deps — keep this lean.
+azure-functions
+httpx>=0.27
