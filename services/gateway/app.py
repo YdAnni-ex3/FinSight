@@ -31,6 +31,7 @@ from finsight_common.parsing import StatementParseError, parse_bytes
 from finsight_common.pii import redact_text
 from finsight_common.rag import RagService
 from finsight_common.vectorstore import get_vector_store
+from finsight_common.vision import get_slip_extractor
 from finsight_common.warehouse import get_transaction_store
 from pydantic import BaseModel
 
@@ -72,6 +73,8 @@ _agent = FinanceAgent(_txn_store, chat=_provider if settings.azure_openai_config
 _anomaly_model = load_anomaly_model(settings.anomaly_model_path)
 _anomaly_ml = "isolation_forest" if _anomaly_model is not None else "disabled"
 
+_slip_extractor = get_slip_extractor(settings)
+
 app = FastAPI(title="FinSight Gateway", version=__version__)
 
 # Prometheus /metrics + standard HTTP request/latency series (no-op without obs extra).
@@ -89,6 +92,15 @@ app.add_middleware(
 )
 
 _ALLOWED_SUFFIXES = (".csv", ".xlsx", ".xls", ".pdf")
+_ALLOWED_SLIP_MIMES: dict[str, str] = {
+    "jpg": "image/jpeg",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+    "webp": "image/webp",
+    "gif": "image/gif",
+    "bmp": "image/bmp",
+    "heic": "image/heic",
+}
 _MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 
 
@@ -243,6 +255,83 @@ def agent_query(payload: QueryRequest) -> dict:
         raise HTTPException(status_code=400, detail="question is required")
     AGENT_QUERIES.inc()
     return _agent.run(payload.question).model_dump()
+
+
+@app.post("/api/slips/ingest")
+async def ingest_slip(file: Annotated[UploadFile, File()]) -> dict:
+    """Extract transactions from a finance slip photo/scan and run full analysis.
+
+    Accepts JPEG, PNG, WEBP, GIF, BMP images (up to 10 MB). Uses a vision LLM
+    (Azure OpenAI or Bedrock) to extract structured transactions, then runs them
+    through the same pipeline as :func:`analyze_statement`.
+    """
+    filename = file.filename or "slip"
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if ext not in _ALLOWED_SLIP_MIMES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported slip format '{ext}'. Accepted: jpg, jpeg, png, webp, gif, bmp, heic.",
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+    if len(data) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+
+    mime_type = _ALLOWED_SLIP_MIMES[ext]
+
+    transactions = _slip_extractor.extract(data, mime_type)
+    if not transactions:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Could not extract any transactions from this image. "
+                "Try a clearer photo, or ensure the file contains readable text."
+            ),
+        )
+
+    for txn in transactions:
+        txn.description = redact_text(txn.description)
+
+    statement = Statement(transactions=transactions)
+    anomalies = combine_anomalies(
+        detect_anomalies(statement),
+        detect_ml_anomalies(statement, _anomaly_model),
+    )
+    indexed = _rag.index_statement(statement, source_id=filename)
+    _txn_store.add(statement.transactions, source_id=filename)
+
+    STATEMENTS_ANALYZED.inc()
+    TRANSACTIONS_INGESTED.inc(len(transactions))
+    for anomaly in anomalies:
+        ANOMALIES_DETECTED.labels(type=anomaly.type).inc()
+
+    log.info(
+        "slip.ingested",
+        filename=filename,
+        transactions=len(transactions),
+        anomalies=len(anomalies),
+        extractor=type(_slip_extractor).__name__,
+    )
+    return {
+        "statement": statement.model_dump(mode="json"),
+        "summary": {
+            "transaction_count": len(transactions),
+            "total_inflow": float(statement.total_inflow),
+            "total_outflow": float(statement.total_outflow),
+            "net": float(statement.net),
+            "categorizer": "vision_llm",
+            "anomaly_count": len(anomalies),
+            "anomaly_ml": _anomaly_ml,
+            "indexed": indexed,
+            "retrieval": _retrieval,
+            "source": "slip",
+            "extractor": type(_slip_extractor).__name__,
+        },
+        "by_category": spend_by_category(statement),
+        "anomalies": [a.model_dump() for a in anomalies],
+    }
 
 
 @app.get("/api/analytics/spend")
