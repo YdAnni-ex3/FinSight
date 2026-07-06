@@ -84,6 +84,43 @@ def _load_kaggle_india_cc(path: Path) -> list[Statement]:
     return statements
 
 
+def _load_kaggle_daily_transactions(path: Path) -> list[Statement]:
+    """Load the 'Daily Household Transactions' dataset into pseudo-statements.
+
+    Rich real-world notes/categories with an income/expense flag. Grouped by
+    (payment mode, month) so each group approximates one account-month.
+    """
+    import pandas as pd
+
+    df = pd.read_csv(path).rename(columns={"Income/Expense": "Flow"})
+    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
+    df = df.dropna(subset=["Date", "Amount"])
+    df["ym"] = df["Date"].dt.to_period("M").astype(str)
+
+    statements: list[Statement] = []
+    for _, group in df.groupby(["Mode", "ym"]):
+        transactions: list[Transaction] = []
+        for row in group.itertuples(index=False):
+            is_income = str(row.Flow).strip().lower() == "income"
+            parts = [str(row.Category), str(row.Subcategory), str(row.Note)]
+            joined = " ".join(p for p in parts if p and p != "nan")
+            description = redact_text(joined) or "transaction"
+            amount = abs(float(row.Amount))
+            signed = amount if is_income else -amount
+            category = Category.INCOME if is_income else categorize_by_rules(description)
+            transactions.append(
+                Transaction(
+                    txn_date=row.Date.date(),
+                    description=description,
+                    amount=Decimal(str(signed)),
+                    category=category,
+                )
+            )
+        if sum(1 for t in transactions if t.amount < 0) >= 5:
+            statements.append(Statement(transactions=transactions))
+    return statements
+
+
 def _build_matrix(statements: list[Statement]) -> list[list[float]]:
     matrix: list[list[float]] = []
     for statement in statements:
@@ -99,19 +136,27 @@ def main() -> None:
     parser.add_argument("--contamination", type=float, default=0.03)
     parser.add_argument("--n-estimators", type=int, default=150)
     parser.add_argument("--kaggle-csv", default=None, help="path to the India credit-card CSV")
+    parser.add_argument(
+        "--kaggle-daily-csv", default=None, help="path to the Daily Household Transactions CSV"
+    )
     parser.add_argument("--no-mlflow", action="store_true", help="skip MLflow tracking")
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
     statements = _load_statements(data_dir)
-    if args.kaggle_csv:
-        kaggle_path = Path(args.kaggle_csv)
-        if kaggle_path.exists():
-            kaggle_statements = _load_kaggle_india_cc(kaggle_path)
-            print(f"Loaded {len(kaggle_statements)} pseudo-statements from {kaggle_path.name}")
-            statements += kaggle_statements
+    for csv_path, loader in (
+        (args.kaggle_csv, _load_kaggle_india_cc),
+        (args.kaggle_daily_csv, _load_kaggle_daily_transactions),
+    ):
+        if not csv_path:
+            continue
+        path = Path(csv_path)
+        if path.exists():
+            loaded = loader(path)
+            print(f"Loaded {len(loaded)} pseudo-statements from {path.name}")
+            statements += loaded
         else:
-            print(f"Kaggle CSV not found: {kaggle_path}")
+            print(f"Kaggle CSV not found: {path}")
     if not statements:
         raise SystemExit(
             f"No statements found in {data_dir}. Run: "
